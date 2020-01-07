@@ -1,0 +1,253 @@
+---
+title: "Project_BA"
+author: "Namratha"
+date: "11/14/2019"
+output: word_document
+---
+
+```{r}
+rm(list = ls())
+library(tm)
+library(SnowballC)
+library(wordcloud)
+library(RColorBrewer)
+library(fpc)
+library(factoextra)
+library(VIM)
+library(cluster)
+library(vegan)
+
+setwd("C:\\Users\\nammu\\Desktop\\BA with R\\Assignment4")
+Tweets = read.csv("NBC-FOX.csv")
+
+# removing the URL links from the text --- source --> (https://stackoverflow.com/questions/25352448/remove-urls-from-string)
+# A bit modified according to the Data set.
+
+Tweets$Tweet_old = Tweets$Tweet
+Tweets$Tweet = gsub(" ?(f|ht)tp(s?)://(.*)", "", Tweets$Tweet)
+# Most of Urls are removed expt in 81, 314th row. Thats because they aren't complete url.
+# Ignoring them for now.
+Tweets_vec = tolower(Tweets$Tweet)
+
+```
+
+
+```{r}
+Tweets_vec = Corpus(VectorSource(Tweets_vec))
+#writeLines(as.character(Tweets_vec[1]))
+
+Tweets_vec = tm_map(Tweets_vec, removeWords, stopwords("en")) #--------> stopwords
+Tweets_vec = tm_map(Tweets_vec, removePunctuation) # -------------> Punctuation
+Tweets_vec = tm_map(Tweets_vec, removeNumbers) # ------------->  Numbers
+Tweets_vec = tm_map(Tweets_vec, stripWhitespace)# ------------> White spaces
+
+Tweets_vec <- tm_map(Tweets_vec, content_transformer(gsub), pattern = "\\b(trump|trumps|realdonaldtrump|donald)\\b", replacement = "donaldtrump")
+Tweets_vec <- tm_map(Tweets_vec, content_transformer(gsub), pattern = "\\b(clinton|hillary|hillaryclinton|hillari)\\b", replacement = "hillaryclinton")
+
+Tweets_vec = tm_map(Tweets_vec, stemDocument) # --------------> stemming
+
+```
+
+You can also embed plots, for example:
+
+```{r}
+dtm <-  DocumentTermMatrix(Tweets_vec)
+inspect(dtm)
+dim(dtm)
+```
+
+
+```{r}
+dtm_new = as.matrix(dtm)
+#frequencies of each word
+x = as.data.frame(t(rowsum(dtm_new, rep(1,400))))
+print('Top 10 frequent words are :')
+row.names(x)[order(x$`1`,decreasing = T)][1:10]
+
+```
+
+```{r}
+#library(wordcloud)
+#png("wordcloud_5.png", width=1280,height=800)
+wordcloud(colnames(dtm_new), as.numeric(rowsum(dtm_new,group = rep(1,400))), scale=c(2,.5), min.freq = 5)
+
+```
+
+```{r}
+
+#   prefer hirarcial clustering as no of observations are less and No of clusters is unknown.
+# model input argument will be my document term matrix.
+
+
+# After lot of trials we felt 7 clusters and binary works wells. Evaluation is done based on the word cloud for each cluster.
+dissimilarity = "binary"
+no_of_clusters = 7
+
+distMatrix_jack <- vegdist(dtm_new, method = "jaccard")
+distMatrix_binary <- dist(dtm_new, method="binary")
+distMatrix_can = dist(dtm_new, "canberra")
+
+
+groups <- hclust(get(paste0('distMatrix_',dissimilarity)),method="ward.D")
+plot(groups, cex=0.9, hang=-1)
+rect.hclust(groups, k=no_of_clusters)
+H_clust_ward <- cutree(groups, k = no_of_clusters)
+
+
+```
+
+```{r}
+Tweets$H_clust_7_bin = H_clust_ward
+
+print("wordcloud for cluster -1")
+wordcloud(Tweets_vec[which(Tweets$H_clust_7_bin==1)], scale=c(1,.5), min.freq = 2, colors=brewer.pal(1,"Dark2"))
+
+print("wordcloud for cluster -2")
+wordcloud(Tweets_vec[which(Tweets$H_clust_7_bin==2)], scale=c(1,.5), min.freq = 2, colors=brewer.pal(1,"Dark2"))
+
+print("wordcloud for cluster -3")
+wordcloud(Tweets_vec[which(Tweets$H_clust_7_bin==3)], scale=c(1,.5), min.freq = 2, colors=brewer.pal(1,"Dark2"))
+
+
+print("wordcloud for cluster -4")
+wordcloud(Tweets_vec[which(Tweets$H_clust_7_bin==4)], scale=c(1,.5), min.freq = 2, colors=brewer.pal(1,"Dark2"))
+
+print("wordcloud for cluster -5")
+wordcloud(Tweets_vec[which(Tweets$H_clust_7_bin==5)], scale=c(1,.5), min.freq = 2, colors=brewer.pal(1,"Dark2"))
+
+print("wordcloud for cluster -6")
+wordcloud(Tweets_vec[which(Tweets$H_clust_7_bin==6)], scale=c(1,.5), min.freq = 2, colors=brewer.pal(1,"Dark2"))
+
+print("wordcloud for cluster -7")
+wordcloud(Tweets_vec[which(Tweets$H_clust_7_bin==7)], scale=c(1,.5), min.freq = 2, colors=brewer.pal(1,"Dark2"))
+
+```
+```{r}
+
+# Clustering results show first cluster is about robbery by US swimmer Ryan Lochte.
+# Cluster 2 is about crime events and also few Campaigns of Trump and Clinton.
+# Cluster 3 is mostly about Donald trump.
+# Cluster 4 is about MSNBC coverage of olympic events.
+# Cluster 5 is mostly about Hillary Clinton
+# Cluster 6 is mostly about Donald Trump's campaigns.
+# Cluster 7 is about survey, polling events etc.
+
+
+
+#Summarizing clusters by news agencies and day
+Tweets$day = as.factor(Tweets$day)
+
+summary(Tweets[Tweets$H_clust_7_bin ==1,c(1,4)])
+print("cluster 1 consists of mostly FoxNews tweets , and most of the tweets are on 18th August 2016.")
+
+summary(Tweets[Tweets$H_clust_7_bin ==2,c(1,4)])
+print("cluster 2 consists of mostly FoxNews tweets , and most of the tweets are on 17th August, closely followed by 18th August 2016.")
+
+summary(Tweets[Tweets$H_clust_7_bin ==3,c(1,4)])
+print("cluster 3 consists of mostly MSNBC tweets , and most of the tweets are on 17th August 2016.")
+
+summary(Tweets[Tweets$H_clust_7_bin ==4,c(1,4)])
+print("cluster 4 consists of only MSNBC tweets , and there is a single tweet every day except on 12th.")
+
+summary(Tweets[Tweets$H_clust_7_bin ==5,c(1,4)])
+print("cluster 5 consists of mostly MSNBC tweets , and most of the tweets are on 17th August 2016.")
+
+summary(Tweets[Tweets$H_clust_7_bin ==6,c(1,4)])
+print("cluster 6 consists of mostly MSNBC tweets , and most of the tweets are on 17th August 2016.")
+
+summary(Tweets[Tweets$H_clust_7_bin ==7,c(1,4)])
+print("cluster 7 consists of mostly MSNBC tweets , and most of the tweets are on 16th August 2016.")
+
+
+```
+
+
+```{r}
+
+dtm_new <- as.data.frame(dtm_new)
+dtm_new$News_channel <- as.integer(Tweets$News.agancy) -1
+# 0 -> Foxnews, 1 -> MSNBC
+News_channel = c("Foxnews","MSNBC")
+```
+
+```{r}
+# logistic regression
+set.seed(0)
+
+s <- sample(c(1:nrow(dtm_new)), nrow(dtm_new)*0.75)
+train <- dtm_new[s,]
+test <- dtm_new[-s,]
+
+table(train$News_channel)
+table(test$News_channel)
+
+lreg = glm(News_channel ~ ., data = train, family = binomial)
+#summary(lreg)
+valid_prediction = predict(lreg, test, type = "response")
+
+valid_output = data.frame(test$News_channel, valid_prediction)
+```
+
+```{r}
+# confusion matrix
+ggl = floor(valid_prediction + 0.5)
+t = table(test$News_channel,ggl)
+t
+
+accuracy = sum(ggl == test$News_channel)/length(ggl)
+accuracy
+```
+
+```{r}
+# KNN classification
+
+library(class)
+knn1 = knn(train = train, test = test, cl = train$News_channel, k = 1)
+knn2 = knn(train = train, test = test, cl = train$News_channel, k = 2)
+knn3 = knn(train = train, test = test, cl = train$News_channel, k = 3)
+knn4 = knn(train = train, test = test, cl = train$News_channel, k = 4)
+
+
+d = data.frame(test$News_channel, knn1,knn2,knn3,knn4)
+t_1 = table(test$News_channel,knn1)
+t_1
+t_2 = table(test$News_channel,knn2)
+t_2
+t_3 = table(test$News_channel,knn3)
+t_3
+t_4 = table(test$News_channel,knn4)
+t_4
+
+sum(knn1 == test$News_channel)/length(knn1)
+sum(knn2 == test$News_channel)/length(knn2)
+sum(knn3 == test$News_channel)/length(knn3)
+sum(knn4 == test$News_channel)/length(knn4)
+
+```
+
+```{r}
+#decision tree classification
+
+library(rpart)
+library(rpart.plot)
+
+tree  = rpart(News_channel~., data = train, method = 'class')
+rpart.plot(tree)
+
+tree_pred = predict(tree, test)
+output = floor(tree_pred[,2]+0.5)
+
+t_1 = table(test$News_channel,output)
+t_1
+
+sum(output == test$News_channel)/length(output)
+
+```
+
+```{r}
+# looking at the results from 3 classification algorithms Knn is performing best. even in knn classification based on 1 neighbor is performing well.
+```
+
+
+
+
